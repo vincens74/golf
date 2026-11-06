@@ -1,5 +1,5 @@
 // 앱을 수정하면 이 번호를 올려주세요. 회원 폰의 예전 저장본이 정리됩니다.
-const CACHE = 'daejumo-v5';
+const CACHE = 'daejumo-v6';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
