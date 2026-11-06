@@ -1,0 +1,11 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": "auth != null && auth.token.email === 'admin@daejumo.club'",
+    "members": { ".read": true },
+    "rounds":  { ".read": true },
+    "records": { ".read": true },
+    "rules":   { ".read": true },
+    "meta":    { ".read": true }
+  }
+}
