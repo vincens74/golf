@@ -18,6 +18,7 @@
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;background:#0d1a0f;font-family:'Noto Sans KR',sans-serif;font-size:15px;color:#e8f5e9;}
@@ -390,16 +391,23 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const DB = firebase.database();
+const AUTH = firebase.auth();
 
 /* ── Firebase 읽기/쓰기 ── */
 function fbGet(path){
   return DB.ref(path).once('value').then(snap=>snap.val());
 }
+// 저장 실패(권한 없음 등) 시 화면에 알림
+function fbWriteFail(err){
+  const denied=err&&String(err.code||err.message||'').toUpperCase().includes('PERMISSION');
+  showToast(denied?'저장 권한이 없습니다. 총무로 다시 로그인하세요':'저장 실패: 인터넷 연결을 확인하세요','err');
+  throw err;
+}
 function fbSet(path,data){
-  return DB.ref(path).set(data);
+  return DB.ref(path).set(data).catch(fbWriteFail);
 }
 function fbRemove(path){
-  return DB.ref(path).remove();
+  return DB.ref(path).remove().catch(fbWriteFail);
 }
 // 실시간 구독 (데이터 변경 시 자동 반영)
 function fbOn(path,cb){
@@ -409,8 +417,15 @@ function fbOn(path,cb){
 /* ══════════════════════════════════════════
    앱 상태
 ══════════════════════════════════════════ */
-// 총무 비밀번호 (변경 원하면 이 값을 수정하세요)
-const ADMIN_PW = '1234';
+// 총무 비밀번호는 암호화된 값(SHA-256)만 저장합니다.
+// 비밀번호를 바꾸려면 README의 "총무 비밀번호 변경" 순서를 따르세요.
+const ADMIN_PW_HASH = '430a9838e8663c02214d6dd5e0cb6fae74c9bd7b8677a5843aee30ef34d29233';
+// Firebase 서버 로그인용 총무 계정 (Firebase 콘솔 Authentication에 등록)
+const ADMIN_EMAIL = 'admin@daejumo.club';
+async function sha256Hex(text){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 
 const S={
   tab:'home',
@@ -1726,11 +1741,16 @@ document.getElementById('btnAdminToggle').addEventListener('click',()=>{
 document.getElementById('btnAdminCancel').addEventListener('click',()=>{
   document.getElementById('covl-admin').classList.remove('on');
 });
-document.getElementById('btnAdminLogin').addEventListener('click',()=>{
+document.getElementById('btnAdminLogin').addEventListener('click',async()=>{
   const pw=document.getElementById('adminPwInput').value;
-  if(pw===ADMIN_PW){
+  if(await sha256Hex('daejumo-club:'+pw)===ADMIN_PW_HASH){
     document.getElementById('covl-admin').classList.remove('on');
     setAdminMode(true);
+    // 서버(Firebase)에도 총무로 로그인해야 저장이 허용됩니다
+    AUTH.signInWithEmailAndPassword(ADMIN_EMAIL,'daejumo'+pw).catch(err=>{
+      console.error(err);
+      showToast('서버 로그인 실패: 저장이 안 될 수 있습니다','err');
+    });
   } else {
     document.getElementById('adminLoginErr').style.display='block';
     document.getElementById('adminPwInput').value='';
@@ -1763,6 +1783,7 @@ document.getElementById('recEditInput').addEventListener('keydown',e=>{if(e.key=
 ══════════════════════════════════════════ */
 function setAdminMode(on){
   S.isAdmin=on;
+  if(!on && AUTH.currentUser) AUTH.signOut().catch(console.error);
   const btn=document.getElementById('btnAdminToggle');
   const newRoundBtn=document.getElementById('btnNewRound');
   if(on){
