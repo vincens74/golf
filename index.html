@@ -565,12 +565,8 @@ function calcHCP(mid, beforeDate){
   });
 
   const perWin=S.RULES&&S.RULES.penalty?S.RULES.penalty.perWin:1;
-  const calcHandy=parseFloat((baseHCP-wins*perWin).toFixed(1));
-
-  // 계산된 핸디가 기존 핸디(hcpBase+72)보다 커지면 기존 핸디로 유지
-  const mb=S.MB.find(x=>x.id===mid);
-  const baseHandy=mb?parseFloat((parseFloat(mb.hcpBase||mb.hcp||20)+72).toFixed(1)):calcHandy;
-  return calcHandy>baseHandy?baseHandy:calcHandy;
+  // 회원 정보의 HCP로 상한을 두지 않음 (기록 기반 핸디만 사용)
+  return parseFloat((baseHCP-wins*perWin).toFixed(1));
 }
 
 
