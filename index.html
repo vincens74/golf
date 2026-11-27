@@ -1284,8 +1284,10 @@ function openDetail(rid){
 /* ══════════════════════════════════════════
    새 라운드
 ══════════════════════════════════════════ */
+// 새 라운드 골프장 기본값 (필요하면 입력칸에서 수정)
+const DEFAULT_COURSE='금강 센테리움CC';
 function openNewRound(){
-  S.nr={date:'',course:'',groups:[],editId:null};S.stp=1;
+  S.nr={date:'',course:DEFAULT_COURSE,groups:[],editId:null};S.stp=1;
   S.gf={name:'',tee:'',sel:[],edit:null};
   document.getElementById('newRoundTitle').textContent='새 라운드 등록';
   renderNewRoundStep();
@@ -1310,7 +1312,7 @@ function renderNewRoundStep(){
       <div class="lbl">날짜</div>
       <input class="inp" id="nr-date" type="date" value="${S.nr.date}">
       <div class="lbl">골프장 이름</div>
-      <input class="inp" id="nr-course" placeholder="예) 로얄포레CC" value="${esc(S.nr.course)}">
+      <input class="inp" id="nr-course" placeholder="예) 금강 센테리움CC" value="${esc(S.nr.course)}" onfocus="this.select()">
       <button class="btn btn-g" id="btnStep2">다음: 조편성 →</button>`;
     document.getElementById('btnStep2').onclick=()=>{
       const d=document.getElementById('nr-date').value;
