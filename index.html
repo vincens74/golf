@@ -1128,58 +1128,34 @@ function renderHome(){
     <div class="sbox"><div class="sval" style="font-size:${ST[0]?.name.length>=3?'14px':'18px'};line-height:1.2;padding-top:2px;">${esc(ST[0]?.name)||'-'}</div><div class="slbl">시즌 1위</div></div>
   </div>`;
 
-  // ② 시즌 순위 (3위까지)
-  h+=`<div class="sec">${seasonYear()} 시즌 순위</div><div class="card" style="padding:8px 4px 4px;">`;
-  if(ST.length===0){
-    h+=`<div style="color:var(--tx3);font-size:14px;text-align:center;padding:14px 0;">${seasonYear()}년 라운드 결과가 아직 없습니다</div>`;
-  } else {
-    ST.slice(0,3).forEach((m,i)=>{
-      h+=`<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:${i<Math.min(ST.length,3)-1?'1px solid var(--bd)':'none'};">
-        ${medal(i+1)}
-        <div style="flex:1;">
-          <div style="font-size:15px;font-weight:700;">${esc(m.name)}</div>
-          <div style="font-size:11px;color:var(--tx3);">${m.pc}회 참가 · 우승 ${m.wins}회</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:17px;font-weight:700;color:var(--ac);">${m.pts}P</div>
-          <div style="font-size:10px;color:var(--tx3);">누적점수</div>
-        </div>
-      </div>`;
-    });
-  }
-  h+=`</div>`;
-
-  // 한 줄 표시: "3월 이름" ··· "92타" (+ 작은 글씨 보조)
-  const homeRow=(icon,label,name,gross,sub,last)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;${last?'':'border-bottom:1px solid var(--bd);'}">
-      <span style="font-size:20px;">${icon}</span>
-      <div style="flex:1;font-size:15px;font-weight:700;"><span style="color:var(--tx3);font-weight:500;margin-right:8px;">${label}</span>${esc(name)}</div>
-      <div style="text-align:right;">
-        <div style="font-size:17px;font-weight:900;color:var(--tx);">${gross}<span style="font-size:11px;font-weight:400;color:var(--tx3);margin-left:2px;">타</span></div>
-        ${sub?`<div style="font-size:11px;color:var(--tx3);margin-top:2px;">${sub}</div>`:''}
-      </div>
-    </div>`;
+  // ② 월별 결과 카드: 우승 · 준우승 · 최저타
   const monthRounds=[];
   sortedYMs.forEach(ym=>byMonth[ym].sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>monthRounds.push(r)));
-
-  // ③ 월별 우승자 (1위만)
-  const winners=monthRounds.map(r=>({r,w:getRanks(r).find(x=>!x.isLowest&&x.rank===1)})).filter(x=>x.w);
-  if(winners.length){
-    h+=`<div class="sec" style="margin-top:4px;">월별 우승자</div><div class="card cardg" style="padding:4px;">`;
-    winners.forEach(({r,w},i)=>{
-      h+=homeRow('🏆',monthOf(r),w.name,w.gross,'핸디 '+parseFloat(w.hcp||0).toFixed(1),i===winners.length-1);
-    });
-    h+=`</div>`;
+  const fmtScore=n=>{const v=parseFloat(n);const t=Number.isInteger(v)?String(v):v.toFixed(1);return v>0?'+'+t:t;};
+  const resRow=(icon,label,e,withScore,last)=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 4px;${last?'':'border-bottom:1px solid var(--bd);'}">
+      <span style="font-size:20px;width:26px;text-align:center;">${icon}</span>
+      <span style="font-size:12px;color:var(--tx3);width:44px;">${label}</span>
+      <span style="flex:1;font-size:16px;font-weight:700;">${esc(e.name)}</span>
+      <span style="font-size:16px;font-weight:900;white-space:nowrap;">${e.gross}<span style="font-size:12px;font-weight:400;color:var(--tx3);">타</span>${withScore?`<span style="font-size:14px;font-weight:700;color:var(--ac);margin-left:2px;">(${fmtScore(e.net)})</span>`:''}</span>
+    </div>`;
+  h+=`<div class="sec">${seasonYear()} 월별 결과</div>`;
+  if(!monthRounds.length){
+    h+=`<div class="card" style="color:var(--tx3);font-size:14px;text-align:center;padding:18px 0;">${seasonYear()}년 라운드 결과가 아직 없습니다</div>`;
   }
-
-  // ④ 메달리스트 (월별 최저타)
-  const lows=monthRounds.map(r=>({r,l:getRanks(r).find(x=>x.isLowest)})).filter(x=>x.l);
-  if(lows.length){
-    h+=`<div class="sec" style="margin-top:4px;">메달리스트</div><div class="card" style="padding:4px;">`;
-    lows.forEach(({r,l},i)=>{
-      h+=homeRow('⭐',monthOf(r),l.name,l.gross,'',i===lows.length-1);
-    });
-    h+=`</div>`;
-  }
+  monthRounds.forEach(r=>{
+    const rk=getRanks(r);
+    const win=rk.find(x=>!x.isLowest&&x.rank===1), second=rk.find(x=>!x.isLowest&&x.rank===2), low=rk.find(x=>x.isLowest);
+    const c=getContest(r.date);
+    const rows=[win&&['🏆','우승',win,true],second&&['🥈','준우승',second,true],low&&['⭐','최저타',low,false]].filter(Boolean);
+    h+=`<div class="card${c?' cardg':''}" style="margin-bottom:10px;padding:12px 12px 4px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="font-size:17px;font-weight:900;color:var(--gdl);">${monthOf(r)}</span>
+        ${c?`<span style="font-size:11px;font-weight:700;color:#0d1a0f;background:var(--gd);border-radius:6px;padding:2px 7px;">${esc(c.name)}</span>`:''}
+        <span style="margin-left:auto;font-size:12px;color:var(--tx3);">${esc(r.course)} · ${r.scores.length}명</span>
+      </div>
+      ${rows.map((x,i)=>resRow(x[0],x[1],x[2],x[3],i===rows.length-1)).join('')}
+    </div>`;
+  });
 
   document.getElementById('page-home').innerHTML=h;
 }
@@ -1864,7 +1840,9 @@ function initFirebase(){
   // rules 실시간 구독
   fbOn('rules', data=>{
     S.RULES=normRules(data||S.RULES);
-    if(S.tab==='rules') renderRules();
+    // 시즌·배점이 바뀌면 지금 보고 있는 화면을 다시 그림
+    const renders={home:renderHome,rounds:renderRounds,members:renderMembers,ranking:renderRanking,records:renderRecords,rules:renderRules};
+    if(renders[S.tab]) renders[S.tab]();
   });
   // 첫 실행 시 기본 rules 저장
   fbGet('rules').then(data=>{
