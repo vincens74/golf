@@ -237,7 +237,7 @@ select{-webkit-appearance:none;appearance:none;}
 <div class="ovl" id="ovl-newRound">
   <div class="mod">
     <div class="mhdr">
-      <div class="mtit">새 라운드 등록 <button class="ibtn" id="btnCloseNewRound">✕</button></div>
+      <div class="mtit"><span id="newRoundTitle">새 라운드 등록</span> <button class="ibtn" id="btnCloseNewRound">✕</button></div>
       <div class="steps"><div class="sdot on" id="sd1"></div><div class="sdot" id="sd2"></div></div>
     </div>
     <div class="mbdy" id="newRoundBody"></div>
@@ -928,6 +928,8 @@ function getStats(){
   }).sort((a,b)=>b.pts-a.pts||(b.pc>0)-(a.pc>0)||a.name.localeCompare(b.name,'ko'));
 }
 
+// 조 표시 이름: '1조 · 07:42'
+function grpLabel(g){return (g.name||'')+(g.tee?' · '+g.tee:'');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function medal(r){
   if(r===1) return '<span style="font-size:20px;">🥇</span>';
@@ -968,7 +970,7 @@ function saveGroupImage(round){
       catch(e){ handy=memberHandy(m.id).toFixed(1); }
       return `${m.name}(${handy})`;
     }).join(', ');
-    return `${esc(g.name)} : ${memberText}`;
+    return `${esc(grpLabel(g))} : ${memberText}`;
   });
 
   let rows='';
@@ -1249,10 +1251,13 @@ function openDetail(rid){
   }
 
   // 조편성
-  h+=`<div class="sec" style="margin-top:16px;">조편성</div>`;
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">
+    <div class="sec" style="margin:0;">조편성</div>
+    ${S.isAdmin?`<button onclick="openEditGroups(${round.id})" style="padding:6px 12px;background:var(--sf2);border:1px solid var(--gd);border-radius:9px;color:var(--gdl);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">✏️ 조 수정</button>`:''}
+  </div><div style="height:10px;"></div>`;
   round.groups.forEach(g=>{
     h+=`<div class="gcrd">
-      <div style="font-size:13px;font-weight:700;color:var(--gd);margin-bottom:9px;">🚩 ${esc(g.name)}</div>`;
+      <div style="font-size:13px;font-weight:700;color:var(--gd);margin-bottom:9px;">🚩 ${esc(grpLabel(g))}</div>`;
     g.mids.forEach(mid=>{
       const m=S.MB.find(x=>x.id===mid);
       const sc=round.scores?.find(s=>s.mid===mid);
@@ -1280,7 +1285,20 @@ function openDetail(rid){
    새 라운드
 ══════════════════════════════════════════ */
 function openNewRound(){
-  S.nr={date:'',course:'',groups:[]};S.stp=1;
+  S.nr={date:'',course:'',groups:[],editId:null};S.stp=1;
+  S.gf={name:'',tee:'',sel:[],edit:null};
+  document.getElementById('newRoundTitle').textContent='새 라운드 등록';
+  renderNewRoundStep();
+  document.getElementById('ovl-newRound').classList.add('on');
+}
+// 확정된 라운드의 조 수정
+function openEditGroups(rid){
+  if(!S.isAdmin){showToast('총무 로그인이 필요합니다','err');return;}
+  const r=S.RD.find(x=>x.id===rid); if(!r) return;
+  S.nr={date:r.date,course:r.course,groups:JSON.parse(JSON.stringify(r.groups||[])),editId:rid};S.stp=2;
+  S.gf={name:'',tee:'',sel:[],edit:null};
+  document.getElementById('newRoundTitle').textContent='조 수정';
+  document.getElementById('ovl-detail').classList.remove('on');
   renderNewRoundStep();
   document.getElementById('ovl-newRound').classList.add('on');
 }
@@ -1292,7 +1310,7 @@ function renderNewRoundStep(){
       <div class="lbl">날짜</div>
       <input class="inp" id="nr-date" type="date" value="${S.nr.date}">
       <div class="lbl">골프장 이름</div>
-      <input class="inp" id="nr-course" placeholder="예) 남서울 CC" value="${esc(S.nr.course)}">
+      <input class="inp" id="nr-course" placeholder="예) 로얄포레CC" value="${esc(S.nr.course)}">
       <button class="btn btn-g" id="btnStep2">다음: 조편성 →</button>`;
     document.getElementById('btnStep2').onclick=()=>{
       const d=document.getElementById('nr-date').value;
@@ -1304,84 +1322,122 @@ function renderNewRoundStep(){
     renderGroupStep();
   }
 }
+const GROUP_MAX=4;
+// 조 만들기 화면: 위에서 조 이름·티오프·조원(최대 4명) 고르고 '조 만들기', 아래에 만든 조 목록
 function renderGroupStep(){
-  const unassigned=S.MB.filter(m=>!S.nr.groups.some(g=>g.mids.includes(m.id)));
-  let h=`<div class="lbl" style="margin-bottom:6px;">미배정 회원 <span style="font-size:11px;color:var(--tx3);font-weight:400;">(탭하여 조 배정)</span></div>
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;min-height:40px;background:var(--sf2);border:1px solid var(--bd);border-radius:11px;padding:8px;">`;
-  if(unassigned.length===0){
-    h+=`<span style="font-size:13px;color:var(--ac);">✅ 전원 배정 완료</span>`;
-  } else {
-    unassigned.forEach(m=>{
-      h+=`<div style="position:relative;">
-        <select onchange="assignMember(${m.id},this.value);this.value='';" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
-          <option value="">조 선택</option>
-          ${S.nr.groups.map((g,i)=>`<option value="${i}">${esc(g.name)}</option>`).join('')}
-        </select>
-        <div style="display:flex;align-items:center;gap:5px;background:var(--sf);border:1px solid var(--bd);border-radius:20px;padding:5px 10px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;">
-          <div style="width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,var(--gr),var(--gl));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:white;">${esc(m.name[0])}</div>
-          ${esc(m.name)}<span style="font-size:11px;color:var(--gd);">▼</span>
-        </div>
-      </div>`;
-    });
-  }
-  h+=`</div>`;
-  S.nr.groups.forEach((g,gi)=>{
-    h+=`<div style="background:var(--sf2);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:nowrap;">
-        <span style="font-size:15px;flex-shrink:0;">🚩</span>
-        <input style="flex:1;min-width:0;background:transparent;border:none;border-bottom:1px solid var(--bd);color:#f0d080;font-weight:700;font-size:14px;outline:none;padding:2px 4px;font-family:inherit;" value="${esc(g.name)}" onchange="renameGroup(${gi},this.value)">
-        <span style="font-size:12px;color:var(--tx3);flex-shrink:0;white-space:nowrap;">${g.mids.length}명</span>
-        <button onclick="deleteGroup(${gi})" style="flex-shrink:0;background:none;border:1px solid #ef535033;color:#ef5350;border-radius:6px;padding:3px 7px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;">삭제</button>
-      </div>`;
-    if(g.mids.length===0){
-      h+=`<div style="font-size:13px;color:var(--tx3);text-align:center;padding:8px 0;">배정된 회원 없음</div>`;
-    } else {
-      g.mids.forEach(mid=>{
-        const m=S.MB.find(x=>x.id===mid); if(!m) return;
-        h+=`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1a2e1c;">
-          <div style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--gr),var(--gl));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:white;">${esc(m.name[0])}</div>
-          <div style="flex:1;font-size:14px;font-weight:600;">${esc(m.name)}</div>
-          <div style="font-size:12px;color:var(--tx3);">${(()=>{try{return '핸디 '+(S.nr.date?calcHCP(m.id,S.nr.date):parseFloat(m.hcp||83)).toFixed(1);}catch(e){return '핸디 '+parseFloat(m.hcp||83).toFixed(1);}})()}</div>
-          <button onclick="unassignMember(${mid})" style="background:none;border:1px solid var(--bd);color:var(--tx3);border-radius:5px;padding:2px 7px;font-size:12px;cursor:pointer;font-family:inherit;">✕</button>
-        </div>`;
-      });
-    }
-    h+=`</div>`;
+  const G=S.gf, editing=G.edit!==null;
+  // 다른 조에 들어간 회원은 고를 수 없음 (수정 중인 조의 조원은 고를 수 있음)
+  const taken=new Set();
+  S.nr.groups.forEach((g,i)=>{if(i!==G.edit) g.mids.forEach(m=>taken.add(m));});
+  const pool=[...S.MB].filter(m=>!taken.has(m.id)).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  const handy=mid=>{try{return calcHCP(mid,S.nr.date).toFixed(1);}catch(e){return memberHandy(mid).toFixed(1);}};
+  const defName=(editing?S.nr.groups[G.edit].name:'')||`${S.nr.groups.length+1}조`;
+  const assigned=S.nr.groups.reduce((n,g)=>n+g.mids.length,0);
+
+  let h=`<div style="font-size:12px;color:var(--tx3);margin-bottom:10px;">${esc(S.nr.date)} · ${esc(S.nr.course)}${S.nr.editId?'':` <a onclick="S.stp=1;renderNewRoundStep();" style="color:var(--gd);cursor:pointer;margin-left:6px;">변경</a>`}</div>
+  <div style="background:var(--sf2);border:1px solid ${editing?'var(--gd)':'var(--bd)'};border-radius:12px;padding:12px;margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:700;color:var(--gdl);margin-bottom:10px;">${editing?'✏️ 조 수정':'＋ 새 조 만들기'}</div>
+    <div class="inprow">
+      <div><div class="lbl">조 이름</div><input class="inp" id="gf-name" placeholder="${esc(defName)}" value="${esc(G.name)}" oninput="S.gf.name=this.value" style="margin-bottom:10px;"></div>
+      <div><div class="lbl">티오프</div><input class="inp" id="gf-tee" type="time" value="${esc(G.tee)}" oninput="S.gf.tee=this.value" style="margin-bottom:10px;"></div>
+    </div>
+    <div class="lbl" style="display:flex;justify-content:space-between;"><span>조원 선택</span><span style="color:${G.sel.length===GROUP_MAX?'var(--gd)':'var(--tx3)'};">${G.sel.length} / ${GROUP_MAX}명</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">`;
+  if(!pool.length) h+=`<span style="font-size:13px;color:var(--ac);padding:6px 0;">✅ 모든 회원이 조에 들어갔어요</span>`;
+  pool.forEach(m=>{
+    const on=G.sel.includes(m.id);
+    h+=`<button onclick="toggleGroupPick(${m.id})" style="display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;
+      background:${on?'linear-gradient(135deg,var(--gr),var(--gl))':'var(--sf)'};color:${on?'#fff':'var(--tx)'};border:1px solid ${on?'var(--gl)':'var(--bd)'};">
+      ${on?'✓ ':''}${esc(m.name)}<span style="font-size:11px;font-weight:400;opacity:.8;">${handy(m.id)}</span></button>`;
   });
-  h+=`<button class="btn btn-s" style="margin-bottom:10px;" onclick="addGroup()">＋ 조 추가</button>
-  <button class="btn btn-c" style="opacity:${S.nr.groups.length===0?0.4:1};" onclick="${S.nr.groups.length>0?'confirmGroups()':'void 0'}">✅ 조 확정</button>
-  <button class="btn btn-s" onclick="S.stp=1;renderNewRoundStep();">← 이전</button>`;
+  h+=`</div>
+    <div style="display:flex;gap:8px;">
+      ${editing?`<button class="btn btn-s" style="margin:0;flex:1;" onclick="cancelGroupEdit()">취소</button>`:''}
+      <button class="btn btn-g" style="flex:2;opacity:${G.sel.length?1:.4};" onclick="saveGroupForm()">${editing?'✓ 조 저장':'＋ 조 만들기'}${G.sel.length?` (${G.sel.length}명)`:''}</button>
+    </div>
+  </div>`;
+
+  h+=`<div class="lbl" style="margin-bottom:8px;">만든 조 · ${S.nr.groups.length}개 조, ${assigned}명</div>`;
+  if(!S.nr.groups.length) h+=`<div style="font-size:13px;color:var(--tx3);text-align:center;padding:12px 0 16px;">아직 만든 조가 없어요. 위에서 조원을 골라 주세요.</div>`;
+  S.nr.groups.forEach((g,gi)=>{
+    h+=`<div style="background:var(--sf2);border:1px solid ${gi===G.edit?'var(--gd)':'var(--bd)'};border-radius:12px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span style="flex:1;font-size:15px;font-weight:700;color:var(--gdl);">🚩 ${esc(grpLabel(g))}</span>
+        <span style="font-size:12px;color:var(--tx3);">${g.mids.length}명</span>
+        <button onclick="editGroupForm(${gi})" style="background:none;border:1px solid var(--bd);color:var(--tx2);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;">수정</button>
+        <button onclick="deleteGroup(${gi})" style="background:none;border:1px solid #ef535055;color:#ef5350;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;">삭제</button>
+      </div>
+      <div style="font-size:14px;color:var(--tx2);line-height:1.7;">${g.mids.map(mid=>{const m=S.MB.find(x=>x.id===mid);return m?`${esc(m.name)} <span style="font-size:11px;color:var(--tx3);">${handy(mid)}</span>`:'';}).filter(Boolean).join(' · ')||'조원 없음'}</div>
+    </div>`;
+  });
+  const can=S.nr.groups.some(g=>g.mids.length);
+  h+=`<button class="btn btn-c" style="opacity:${can?1:.4};" onclick="${can?'confirmGroups()':'void 0'}">✅ ${S.nr.editId?'조 수정 저장':'조편성 완료'}</button>
+  ${S.nr.editId?'':`<button class="btn btn-s" onclick="S.stp=1;renderNewRoundStep();">← 이전</button>`}`;
   document.getElementById('newRoundBody').innerHTML=h;
 }
-function addGroup(){S.nr.groups.push({name:`${S.nr.groups.length+1}조`,mids:[]});renderGroupStep();}
-function renameGroup(i,n){S.nr.groups[i].name=n;}
-function deleteGroup(i){S.nr.groups.splice(i,1);renderGroupStep();}
-function assignMember(mid,gi){
-  S.nr.groups.forEach(g=>{g.mids=g.mids.filter(id=>id!==mid);});
-  if(gi!==''&&gi>=0) S.nr.groups[parseInt(gi)].mids.push(mid);
+function toggleGroupPick(mid){
+  const sel=S.gf.sel;
+  if(sel.includes(mid)) S.gf.sel=sel.filter(x=>x!==mid);
+  else if(sel.length>=GROUP_MAX){showToast(`한 조는 최대 ${GROUP_MAX}명이에요`,'err');return;}
+  else sel.push(mid);
   renderGroupStep();
 }
-function unassignMember(mid){S.nr.groups.forEach(g=>{g.mids=g.mids.filter(id=>id!==mid);});renderGroupStep();}
+function saveGroupForm(){
+  const G=S.gf;
+  if(!G.sel.length){showToast('조원을 1명 이상 골라 주세요','err');return;}
+  const editing=G.edit!==null;
+  const name=(G.name||'').trim()||(editing?S.nr.groups[G.edit].name:'')||`${S.nr.groups.length+1}조`;
+  const g={name,tee:G.tee||'',mids:[...G.sel]};
+  if(editing) S.nr.groups[G.edit]=g; else S.nr.groups.push(g);
+  S.gf={name:'',tee:'',sel:[],edit:null};
+  renderGroupStep();
+}
+function editGroupForm(gi){
+  const g=S.nr.groups[gi];
+  S.gf={name:g.name||'',tee:g.tee||'',sel:[...g.mids],edit:gi};
+  renderGroupStep();
+  document.getElementById('newRoundBody').scrollTop=0;
+}
+function cancelGroupEdit(){S.gf={name:'',tee:'',sel:[],edit:null};renderGroupStep();}
+function deleteGroup(i){
+  S.nr.groups.splice(i,1);
+  if(S.gf.edit===i) S.gf={name:'',tee:'',sel:[],edit:null};
+  else if(S.gf.edit!==null&&S.gf.edit>i) S.gf.edit--;
+  renderGroupStep();
+}
 
 function confirmGroups(){
-  if(!S.nr.groups.length) return;
-  const round={
-    id:S.nRid,
-    date:S.nr.date,
-    course:S.nr.course,
-    groups:JSON.parse(JSON.stringify(S.nr.groups)),
-    scores:[]
-  };
-  // Firebase 저장
+  const groups=JSON.parse(JSON.stringify(S.nr.groups.filter(g=>g.mids.length)));
+  if(!groups.length) return;
+  if(S.gf.sel.length&&!confirm('골라 놓은 조원이 아직 조로 만들어지지 않았어요. 그대로 저장할까요?')) return;
+  if(S.nr.editId){
+    // 확정된 라운드 조 수정
+    const r=S.RD.find(x=>x.id===S.nr.editId); if(!r) return;
+    const inGroups=new Set(groups.flatMap(g=>g.mids));
+    const dropped=(r.scores||[]).filter(s=>!inGroups.has(s.mid));
+    if(dropped.length){
+      const names=dropped.map(s=>(S.MB.find(m=>m.id===s.mid)||{}).name).join(', ');
+      if(!confirm(`점수가 입력된 회원(${names})이 조에서 빠졌어요. 이 회원들의 점수도 지울까요?`)) return;
+      dropped.forEach(s=>{
+        const rec=S.RECORDS.find(x=>x.roundId===r.id&&x.mid===s.mid);
+        if(rec){fbRemove('records/'+rec.id).catch(console.error);S.RECORDS=S.RECORDS.filter(x=>x.id!==rec.id);}
+      });
+    }
+    const upd={...r,groups,scores:(r.scores||[]).filter(s=>inGroups.has(s.mid))};
+    S.RD=S.RD.map(x=>x.id===r.id?upd:x);
+    fbSet('rounds/'+r.id, upd).then(()=>showToast('✅ 조편성이 수정되었습니다')).catch(console.error);
+    document.getElementById('ovl-newRound').classList.remove('on');
+    openDetail(r.id);
+    return;
+  }
+  const round={id:S.nRid,date:S.nr.date,course:S.nr.course,groups,scores:[]};
   S.nRid++;
   fbSet('rounds/'+round.id, round).catch(console.error);
   fbSet('meta/nRid', S.nRid).catch(console.error);
-  // 모달 닫기
   document.getElementById('ovl-newRound').classList.remove('on');
-  S.nr={date:'',course:'',groups:[]};S.stp=1;
-  // 화면 전환
+  S.nr={date:'',course:'',groups:[],editId:null};S.stp=1;
   setTab('rounds');
-  // 이미지 저장 (html2canvas)
+  // 조편성표 이미지 저장
   saveGroupImage(round);
 }
 
@@ -1411,7 +1467,7 @@ function openScoreEntry(){
   let h=`<div style="font-size:13px;color:var(--tx3);margin-bottom:14px;padding:8px 12px;background:var(--sf2);border-radius:9px;border:1px solid var(--bd);">그로스(총 타수) 입력 → Score 자동 계산</div>`;
   round.groups.forEach(g=>{
     h+=`<div class="card" style="margin-bottom:12px;">
-      <div style="font-size:13px;color:var(--gd);font-weight:700;margin-bottom:10px;">${esc(g.name)}</div>`;
+      <div style="font-size:13px;color:var(--gd);font-weight:700;margin-bottom:10px;">${esc(grpLabel(g))}</div>`;
     g.mids.forEach(mid=>{
       const m=S.MB.find(x=>x.id===mid); if(!m) return;
       const v=S.se[mid]||'';
